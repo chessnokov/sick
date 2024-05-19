@@ -1,58 +1,47 @@
-use std::io::Error as IoError;
+use std::{io::Error as IoError, marker::PhantomData};
 
 use tokio::io::{AsyncRead, AsyncReadExt};
 
+// TODO: try to use frombytes::FromBytes
 pub trait FromBytes: Sized {
     type Error;
     fn from_bytes<'a>(input: &'a [u8]) -> Result<(&'a [u8], Self), Error<Self::Error>>;
 }
 
-pub trait Decoder {
-    type Item: FromBytes;
-    fn decode<'a>(
-        &mut self,
-        input: &'a [u8],
-    ) -> Result<(&'a [u8], Self::Item), Error<<Self::Item as FromBytes>::Error>> {
-        Self::Item::from_bytes(input)
-    }
-}
-
-pub struct StreamDecoder<R, D> {
+pub struct StreamDecoder<R, T> {
     reader: R,
-    decoder: D,
     buffer: Vec<u8>,
     read: usize,
     write: usize,
+    _item: PhantomData<T>,
 }
 
-impl<R, D> StreamDecoder<R, D> {
-    pub fn new(capacity: usize, reader: R, decoder: D) -> StreamDecoder<R, D> {
+impl<R, T> StreamDecoder<R, T> {
+    pub fn new(capacity: usize, reader: R) -> StreamDecoder<R, T> {
         StreamDecoder {
             reader,
-            decoder,
             buffer: vec![0; capacity],
             read: 0,
             write: 0,
+            _item: PhantomData,
         }
     }
 }
 
-impl<R, D> StreamDecoder<R, D>
+impl<R, T> StreamDecoder<R, T>
 where
     R: AsyncRead + Unpin,
-    D: Decoder,
+    T: FromBytes,
 {
-    pub async fn async_decode(
-        &mut self,
-    ) -> Result<D::Item, StreamError<<D::Item as FromBytes>::Error>> {
+    pub async fn async_decode(&mut self) -> Result<T, StreamError<T::Error>> {
         let Self {
             ref mut reader,
             ref mut buffer,
             ref mut read,
             ref mut write,
-            ref mut decoder,
+            _item,
         } = *self;
-        while let Err(Error::Incomplete(n)) = decoder.decode(&buffer[*read..*write]) {
+        while let Err(Error::Incomplete(n)) = T::from_bytes(&buffer[*read..*write]) {
             let needed = n.unwrap_or_default();
             let mut total = 0;
             loop {
@@ -83,7 +72,7 @@ where
             }
         }
 
-        match decoder.decode(&buffer[*read..*write]) {
+        match T::from_bytes(&buffer[*read..*write]) {
             Ok((tail, message)) => {
                 *read = *write - tail.len();
                 return Ok(message);
