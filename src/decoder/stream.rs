@@ -1,13 +1,28 @@
-use std::{io::Error as IoError, marker::PhantomData};
+use std::{
+    fmt::{self, Display},
+    io::Error as IoError,
+    marker::PhantomData,
+};
 
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use super::{Error, FromBytes};
 
+#[derive(Debug)]
 pub enum StreamError<T> {
     Read(IoError),
     Decode(T),
     BufferOverflow,
+}
+
+impl<T: Display> fmt::Display for StreamError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StreamError::Read(err) => write!(f, "{err}"),
+            StreamError::Decode(err) => write!(f, "{err}"),
+            StreamError::BufferOverflow => f.write_str("Not enough memory"),
+        }
+    }
 }
 
 impl<T> From<IoError> for StreamError<T> {
@@ -16,7 +31,7 @@ impl<T> From<IoError> for StreamError<T> {
     }
 }
 
-pub struct StreamDecoder<R, T> {
+pub struct Decoder<R, T> {
     reader: R,
     buffer: Vec<u8>,
     read: usize,
@@ -24,12 +39,12 @@ pub struct StreamDecoder<R, T> {
     _item: PhantomData<T>,
 }
 
-impl<R, T> StreamDecoder<R, T>
+impl<R, T> Decoder<R, T>
 where
     R: AsyncRead + Unpin,
     T: for<'a> FromBytes<'a>,
 {
-    pub async fn async_decode(&mut self) -> Result<T, StreamError<<T as FromBytes<'_>>::Error>> {
+    pub async fn decode(&mut self) -> Result<T, StreamError<<T as FromBytes<'_>>::Error>> {
         let Self {
             ref mut reader,
             ref mut buffer,
@@ -38,7 +53,7 @@ where
             _item,
         } = *self;
         while let Some(n) = T::incomplited(&buffer[*read..*write]) {
-            let needed = n.amount();
+            let needed = n.around();
             let mut total = 0;
             loop {
                 let tail = buffer.len() - *write;
