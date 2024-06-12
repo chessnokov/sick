@@ -9,7 +9,7 @@ pub trait FromBytes<'bytes>: Sized {
     /// for example:
     /// ```
     /// if input.len() < REQUIRED {
-    ///   return Some(Incomplete::Bytes(REQUIRED))
+    ///   return Some(Incomplete::Bytes(REQUIRED - input.len()))
     /// }
     fn incomplited(input: &'bytes [u8]) -> Option<Incomplete> {
         if let Err(Error::Incomplete(n)) = Self::from_bytes(input) {
