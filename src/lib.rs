@@ -17,18 +17,11 @@ pub trait Handle<'request> {
     type Request: FromBytes<'request>;
     async fn consume(&mut self, request: Self::Request);
 
-    /// Return only `Encoder` Error
+    /// Return only std::io::Error from `Encoder`
     async fn produce<W: AsyncWrite + Unpin>(
         &mut self,
         encoder: &mut Encoder<W>,
-    ) -> Result<Loop, Error>;
-}
-
-pub enum Loop {
-    /// Continue working
-    Continue,
-    /// Break loop and close socket
-    Break,
+    ) -> Result<(), Error>;
 }
 
 #[allow(dead_code)]
@@ -72,10 +65,7 @@ where
                 }
                 result = self.handle.produce(&mut self.encoder) => {
                     match result {
-                        Ok(Loop::Continue) => {}
-                        Ok(Loop::Break) => {
-                            break;
-                        }
+                        Ok(_) => {}
                         Err(err) => {
                             error!("{err}");
                             break;
