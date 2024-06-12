@@ -2,12 +2,9 @@ use std::fmt::Display;
 pub use std::io::Error;
 
 use decoder::{stream::Decoder, FromBytes};
-use encoder::stream::Encoder;
+use encoder::Encoder;
 use log::error;
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    select,
-};
+use tokio::{io::AsyncRead, select};
 
 pub mod decoder;
 pub mod encoder;
@@ -17,18 +14,18 @@ pub trait Handle<'request> {
     type Request: FromBytes<'request>;
     async fn call(&mut self, request: Self::Request);
     /// Return only std::io::Error from `Encoder`
-    async fn poll<W: AsyncWrite + Unpin>(&mut self, encoder: &mut Encoder<W>) -> Result<(), Error>;
+    async fn poll<E: Encoder>(&mut self, encoder: &mut E) -> Result<(), Error>;
 }
 
 #[allow(dead_code)]
-pub struct Service<R, T, H, W> {
+pub struct Service<R, T, H, E> {
     decoder: Decoder<R, T>,
     handle: H,
-    encoder: Encoder<W>,
+    encoder: E,
 }
 
-impl<R, T, H, W> Service<R, T, H, W> {
-    pub fn new(decoder: Decoder<R, T>, handle: H, encoder: Encoder<W>) -> Service<R, T, H, W> {
+impl<R, T, H, E> Service<R, T, H, E> {
+    pub fn new(decoder: Decoder<R, T>, handle: H, encoder: E) -> Service<R, T, H, E> {
         Service {
             decoder,
             handle,
@@ -37,13 +34,13 @@ impl<R, T, H, W> Service<R, T, H, W> {
     }
 }
 
-impl<R, T, H, W> Service<R, T, H, W>
+impl<R, T, H, E> Service<R, T, H, E>
 where
     R: AsyncRead + Unpin,
     T: for<'a> FromBytes<'a>,
     for<'a> <T as FromBytes<'a>>::Error: Display,
     H: for<'a> Handle<'a, Request = T>,
-    W: AsyncWrite + Unpin,
+    E: Encoder,
 {
     pub async fn handle(&mut self) {
         loop {
