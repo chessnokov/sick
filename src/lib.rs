@@ -64,12 +64,9 @@ where
                     }
                 }
                 result = self.handle.produce(&mut self.encoder) => {
-                    match result {
-                        Ok(_) => {}
-                        Err(err) => {
-                            error!("{err}");
-                            break;
-                        }
+                    if let Err(err) = result {
+                        error!("{err}");
+                        break;
                     }
                 }
             }
