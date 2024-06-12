@@ -1,32 +1,7 @@
-use std::{
-    fmt,
-    io::{Error as IoError, Seek, Write},
-};
+use std::io::{Error, Seek, Write};
 
 pub trait ToBytes {
-    type Error;
-    fn to_bytes<W: Write + Seek>(&self, writer: &mut W) -> Result<usize, Error<Self::Error>>;
-}
-
-#[derive(Debug)]
-pub enum Error<T> {
-    Writer(IoError),
-    Encode(T),
-}
-
-impl<T: fmt::Display> fmt::Display for Error<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Error::Writer(err) => write!(f, "{err}"),
-            Error::Encode(err) => write!(f, "{err}"),
-        }
-    }
-}
-
-impl<T> From<IoError> for Error<T> {
-    fn from(err: IoError) -> Self {
-        Error::Writer(err)
-    }
+    fn to_bytes<W: Write + Seek>(&self, writer: &mut W) -> Result<usize, Error>;
 }
 
 pub mod stream {
@@ -51,7 +26,7 @@ pub mod stream {
     }
 
     impl<W: AsyncWrite + Unpin> Encoder<W> {
-        pub async fn encode<T: ToBytes>(&mut self, message: &T) -> Result<usize, Error<T::Error>> {
+        pub async fn encode<T: ToBytes>(&mut self, message: &T) -> Result<usize, Error> {
             self.buffer.seek(SeekFrom::Start(0))?;
             message.to_bytes(&mut self.buffer)?;
             let pos = self.buffer.position() as usize;

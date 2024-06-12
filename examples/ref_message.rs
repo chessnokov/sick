@@ -1,8 +1,8 @@
-use std::io::{Seek, Write};
+use std::io::{Error, Seek, Write};
 
 use sick::{
     decoder::{Error as DecodeError, FromBytes},
-    encoder::{Error as EncodeError, ToBytes},
+    encoder::ToBytes,
 };
 
 #[derive(Debug)]
@@ -18,9 +18,7 @@ impl<'bytes> FromBytes<'bytes> for Message<'bytes> {
 }
 
 impl<'a> ToBytes for Message<'a> {
-    type Error = ();
-
-    fn to_bytes<W: Write + Seek>(&self, writer: &mut W) -> Result<usize, EncodeError<Self::Error>> {
+    fn to_bytes<W: Write + Seek>(&self, writer: &mut W) -> Result<usize, Error> {
         writer.write_all(self.0)?;
         Ok(self.0.len())
     }
