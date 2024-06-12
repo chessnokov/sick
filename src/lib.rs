@@ -15,13 +15,9 @@ pub mod encoder;
 #[allow(async_fn_in_trait)]
 pub trait Handle<'request> {
     type Request: FromBytes<'request>;
-    async fn consume(&mut self, request: Self::Request);
-
+    async fn call(&mut self, request: Self::Request);
     /// Return only std::io::Error from `Encoder`
-    async fn produce<W: AsyncWrite + Unpin>(
-        &mut self,
-        encoder: &mut Encoder<W>,
-    ) -> Result<(), Error>;
+    async fn poll<W: AsyncWrite + Unpin>(&mut self, encoder: &mut Encoder<W>) -> Result<(), Error>;
 }
 
 #[allow(dead_code)]
@@ -55,7 +51,7 @@ where
                 request = self.decoder.decode() => {
                     match request {
                         Ok(request) => {
-                            self.handle.consume(request).await;
+                            self.handle.call(request).await;
                         }
                         Err(err) => {
                             error!("{err}");
@@ -63,7 +59,7 @@ where
                         },
                     }
                 }
-                result = self.handle.produce(&mut self.encoder) => {
+                result = self.handle.poll(&mut self.encoder) => {
                     if let Err(err) = result {
                         error!("{err}");
                         break;
