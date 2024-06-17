@@ -1,12 +1,22 @@
 use std::{
     fmt::{self, Display},
     io::Error as IoError,
-    marker::PhantomData,
 };
 
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use super::{Error, FromBytes};
+
+#[allow(async_fn_in_trait)]
+pub trait StreamDecoder {
+    async fn decode<T, R>(
+        &mut self,
+        reader: &mut R,
+    ) -> Result<T, StreamError<<T as FromBytes<'_>>::Error>>
+    where
+        T: for<'a> FromBytes<'a>,
+        R: AsyncRead + Unpin;
+}
 
 #[derive(Debug)]
 pub enum StreamError<T> {
@@ -31,26 +41,25 @@ impl<T> From<IoError> for StreamError<T> {
     }
 }
 
-pub struct Decoder<R, T> {
-    reader: R,
+pub struct RingBuf {
     buffer: Vec<u8>,
     read: usize,
     write: usize,
-    _item: PhantomData<T>,
 }
 
-impl<R, T> Decoder<R, T>
-where
-    R: AsyncRead + Unpin,
-    T: for<'a> FromBytes<'a>,
-{
-    pub async fn decode(&mut self) -> Result<T, StreamError<<T as FromBytes<'_>>::Error>> {
+impl RingBuf {
+    pub async fn decode<R, T>(
+        &mut self,
+        reader: &mut R,
+    ) -> Result<T, StreamError<<T as FromBytes<'_>>::Error>>
+    where
+        R: AsyncRead + Unpin,
+        T: for<'a> FromBytes<'a>,
+    {
         let Self {
-            ref mut reader,
             ref mut buffer,
             ref mut read,
             ref mut write,
-            _item,
         } = *self;
         while let Some(n) = T::incomplited(&buffer[*read..*write]) {
             let needed = n.around();

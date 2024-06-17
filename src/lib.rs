@@ -1,7 +1,7 @@
 use std::fmt::Display;
 pub use std::io::Error;
 
-use decoder::{stream::Decoder, FromBytes};
+use decoder::{stream::RingBuf, FromBytes};
 use encoder::Encoder;
 use log::error;
 use tokio::{io::AsyncRead, select};
@@ -18,15 +18,17 @@ pub trait Handle<'request> {
 }
 
 #[allow(dead_code)]
-pub struct Service<R, T, H, E> {
-    decoder: Decoder<R, T>,
+pub struct Service<R, H, E> {
+    reader: R,
+    decoder: RingBuf,
     handle: H,
     encoder: E,
 }
 
-impl<R, T, H, E> Service<R, T, H, E> {
-    pub fn new(decoder: Decoder<R, T>, handle: H, encoder: E) -> Service<R, T, H, E> {
+impl<R, H, E> Service<R, H, E> {
+    pub fn new(reader: R, decoder: RingBuf, handle: H, encoder: E) -> Service<R, H, E> {
         Service {
+            reader,
             decoder,
             handle,
             encoder,
@@ -34,7 +36,7 @@ impl<R, T, H, E> Service<R, T, H, E> {
     }
 }
 
-impl<R, T, H, E> Service<R, T, H, E>
+impl<R, H, E, T> Service<R, H, E>
 where
     R: AsyncRead + Unpin,
     T: for<'a> FromBytes<'a>,
@@ -45,7 +47,7 @@ where
     pub async fn handle(&mut self) {
         loop {
             select! {
-                request = self.decoder.decode() => {
+                request = self.decoder.decode(&mut self.reader) => {
                     match request {
                         Ok(request) => {
                             self.handle.call(request).await;
