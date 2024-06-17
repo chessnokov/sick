@@ -50,3 +50,10 @@ impl Incomplete {
         }
     }
 }
+
+#[derive(Debug)]
+pub struct BufDecoder {
+    buffer: Vec<u8>,
+    read: usize,
+    write: usize,
+}

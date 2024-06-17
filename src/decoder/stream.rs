@@ -5,7 +5,7 @@ use std::{
 
 use tokio::io::{AsyncRead, AsyncReadExt};
 
-use super::{Error, FromBytes};
+use super::{BufDecoder, Error, FromBytes};
 
 #[allow(async_fn_in_trait)]
 pub trait StreamDecoder {
@@ -41,14 +41,8 @@ impl<T> From<IoError> for StreamError<T> {
     }
 }
 
-pub struct RingBuf {
-    buffer: Vec<u8>,
-    read: usize,
-    write: usize,
-}
-
-impl RingBuf {
-    pub async fn decode<R, T>(
+impl StreamDecoder for BufDecoder {
+    async fn decode<T, R>(
         &mut self,
         reader: &mut R,
     ) -> Result<T, StreamError<<T as FromBytes<'_>>::Error>>

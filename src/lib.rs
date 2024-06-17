@@ -1,7 +1,7 @@
 use std::fmt::Display;
 pub use std::io::Error;
 
-use decoder::{stream::RingBuf, FromBytes};
+use decoder::{stream::StreamDecoder, BufDecoder, FromBytes};
 use encoder::Encoder;
 use log::error;
 use tokio::{io::AsyncRead, select};
@@ -20,13 +20,13 @@ pub trait Handle<'request> {
 #[allow(dead_code)]
 pub struct Service<R, H, E> {
     reader: R,
-    decoder: RingBuf,
+    decoder: BufDecoder,
     handle: H,
     encoder: E,
 }
 
 impl<R, H, E> Service<R, H, E> {
-    pub fn new(reader: R, decoder: RingBuf, handle: H, encoder: E) -> Service<R, H, E> {
+    pub fn new(reader: R, decoder: BufDecoder, handle: H, encoder: E) -> Service<R, H, E> {
         Service {
             reader,
             decoder,
