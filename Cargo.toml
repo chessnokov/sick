@@ -19,6 +19,5 @@ tokio = { version = "1", features = [
     "net",
 ] }
 
-[[examples]]
+[[example]]
 name = "ref_message"
-path = "examples/ref_message.rs"
