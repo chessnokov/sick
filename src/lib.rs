@@ -18,39 +18,39 @@ pub trait Handle<'request> {
 }
 
 #[allow(dead_code)]
-pub struct Service<R, H, E> {
+pub struct Socket<R, E> {
     reader: R,
     decoder: BufDecoder,
-    handle: H,
     encoder: E,
 }
 
-impl<R, H, E> Service<R, H, E> {
-    pub fn new(reader: R, decoder: BufDecoder, handle: H, encoder: E) -> Service<R, H, E> {
-        Service {
+impl<R, E> Socket<R, E> {
+    pub fn new(reader: R, decoder: BufDecoder, encoder: E) -> Socket<R, E> {
+        Socket {
             reader,
             decoder,
-            handle,
             encoder,
         }
     }
 }
 
-impl<R, H, E, T> Service<R, H, E>
+impl<R, E> Socket<R, E>
 where
     R: AsyncRead + Unpin,
-    T: for<'a> FromBytes<'a>,
-    for<'a> <T as FromBytes<'a>>::Error: Display,
-    H: for<'a> Handle<'a, Request = T>,
     E: Encoder,
 {
-    pub async fn handle(&mut self) {
+    pub async fn handle<H, T>(&mut self, handler: &mut H)
+    where
+        T: for<'a> FromBytes<'a>,
+        for<'a> <T as FromBytes<'a>>::Error: Display,
+        H: for<'a> Handle<'a, Request = T>,
+    {
         loop {
             select! {
                 request = self.decoder.decode(&mut self.reader) => {
                     match request {
                         Ok(request) => {
-                            self.handle.call(request).await;
+                            handler.call(request).await;
                         }
                         Err(err) => {
                             error!("{err}");
@@ -58,7 +58,7 @@ where
                         },
                     }
                 }
-                result = self.handle.poll(&mut self.encoder) => {
+                result = handler.poll(&mut self.encoder) => {
                     if let Err(err) = result {
                         error!("{err}");
                         break;
