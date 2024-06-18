@@ -9,12 +9,12 @@ use super::{BufDecoder, Error, FromBytes};
 
 #[allow(async_fn_in_trait)]
 pub trait StreamDecoder {
-    async fn decode<T, R>(
-        &mut self,
+    async fn decode<'a, T, R>(
+        &'a mut self,
         reader: &mut R,
     ) -> Result<T, StreamError<<T as FromBytes<'_>>::Error>>
     where
-        T: for<'a> FromBytes<'a>,
+        T: FromBytes<'a>,
         R: AsyncRead + Unpin;
 }
 
@@ -42,20 +42,20 @@ impl<T> From<IoError> for StreamError<T> {
 }
 
 impl StreamDecoder for BufDecoder {
-    async fn decode<T, R>(
-        &mut self,
+    async fn decode<'a, T, R>(
+        &'a mut self,
         reader: &mut R,
-    ) -> Result<T, StreamError<<T as FromBytes<'_>>::Error>>
+    ) -> Result<T, StreamError<<T as FromBytes<'a>>::Error>>
     where
         R: AsyncRead + Unpin,
-        T: for<'a> FromBytes<'a>,
+        T: FromBytes<'a>,
     {
         let Self {
             ref mut buffer,
             ref mut read,
             ref mut write,
         } = *self;
-        while let Some(n) = T::incomplited(&buffer[*read..*write]) {
+        while let Some(n) = T::check(&buffer[*read..*write]) {
             let needed = n.around();
             let mut total = 0;
             loop {

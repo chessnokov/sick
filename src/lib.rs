@@ -39,11 +39,11 @@ where
     R: AsyncRead + Unpin,
     E: Encoder,
 {
-    pub async fn handle<H, T>(&mut self, handler: &mut H)
+    pub async fn handle<'a, H, T>(&'a mut self, handler: &mut H)
     where
-        T: for<'a> FromBytes<'a>,
-        for<'a> <T as FromBytes<'a>>::Error: Display,
-        H: for<'a> Handle<'a, Request = T>,
+        T: FromBytes<'a>,
+        <T as FromBytes<'a>>::Error: Display,
+        H: Handle<'a, Request = T>,
     {
         loop {
             select! {
