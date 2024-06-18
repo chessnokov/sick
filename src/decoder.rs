@@ -57,3 +57,13 @@ pub struct BufDecoder {
     read: usize,
     write: usize,
 }
+
+impl BufDecoder {
+    pub fn new(size: usize) -> Self {
+        Self {
+            buffer: vec![0; size],
+            read: 0,
+            write: 0,
+        }
+    }
+}

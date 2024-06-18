@@ -8,4 +8,17 @@ resolver = "2"
 log = "0.4"
 tokio = { version = "1", features = ["io-util", "macros"] }
 
+[dev-dependencies]
+anyhow = "1"
+tokio = { version = "1", features = [
+    "io-util",
+    "macros",
+    "sync",
+    "rt",
+    "rt-multi-thread",
+    "net",
+] }
+
 [[examples]]
+name = "ref_message"
+path = "examples/ref_message.rs"

@@ -18,15 +18,15 @@ pub trait Handle<'request> {
 }
 
 #[allow(dead_code)]
-pub struct Socket<R, E> {
+pub struct EndPoint<R, E> {
     reader: R,
     decoder: BufDecoder,
     encoder: E,
 }
 
-impl<R, E> Socket<R, E> {
-    pub fn new(reader: R, decoder: BufDecoder, encoder: E) -> Socket<R, E> {
-        Socket {
+impl<R, E> EndPoint<R, E> {
+    pub fn new(reader: R, decoder: BufDecoder, encoder: E) -> EndPoint<R, E> {
+        EndPoint {
             reader,
             decoder,
             encoder,
@@ -34,7 +34,7 @@ impl<R, E> Socket<R, E> {
     }
 }
 
-impl<R, E> Socket<R, E>
+impl<R, E> EndPoint<R, E>
 where
     R: AsyncRead + Unpin,
     E: Encoder,
