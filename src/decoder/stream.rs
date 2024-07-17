@@ -54,7 +54,7 @@ impl StreamDecoder for BufDecoder {
         loop {
             match T::from_bytes(&self.buffer[self.read..self.write]) {
                 Ok((tail, msg)) => {
-                    self.read += self.write - tail.len();
+                    self.read = self.write - tail.len();
                     return Ok(msg);
                 }
                 Err(Error::Decode(err)) => return Err(StreamError::Decode(err)),
