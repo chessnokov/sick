@@ -1,3 +1,4 @@
+use core::slice;
 use std::{
     fmt::{self, Display},
     io::Error as IoError,
@@ -12,7 +13,7 @@ pub trait StreamDecoder {
     async fn decode<'a, T, R>(
         &'a mut self,
         reader: &mut R,
-    ) -> Result<T, StreamError<<T as FromBytes<'_>>::Error>>
+    ) -> Result<T, StreamError<<T as FromBytes<'a>>::Error>>
     where
         T: FromBytes<'a>,
         R: AsyncRead + Unpin;
@@ -50,49 +51,39 @@ impl StreamDecoder for BufDecoder {
         R: AsyncRead + Unpin,
         T: FromBytes<'a>,
     {
-        let Self {
-            ref mut buffer,
-            ref mut read,
-            ref mut write,
-        } = *self;
-        while let Some(n) = T::check(&buffer[*read..*write]) {
-            let needed = n.around();
-            let mut total = 0;
-            loop {
-                let tail = buffer.len() - *write;
-                let free = tail + *read;
+        loop {
+            match T::from_bytes(&self.buffer[self.read..self.write]) {
+                Ok((tail, msg)) => {
+                    self.read += self.write - tail.len();
+                    return Ok(msg);
+                }
+                Err(Error::Decode(err)) => return Err(StreamError::Decode(err)),
+                Err(Error::Incomplete(n)) => {
+                    let needed = n.around().unwrap_or(1);
+                    let tail = self.buffer.len() - self.write;
+                    let free = tail + self.read;
+                    if free >= needed {
+                        // Fix borrow checker false error
+                        // Safety: because buffer not reallocate or drop
+                        let temp = unsafe {
+                            slice::from_raw_parts_mut(
+                                self.buffer.as_ptr() as *mut u8,
+                                self.buffer.len(),
+                            )
+                        };
 
-                if free >= needed {
-                    // TODO: Move this to strategy
-                    if *read > tail {
-                        // Shift data
-                        buffer.copy_within(*read..*write, 0);
-                        *write -= *read;
-                        *read = 0;
+                        if tail < needed {
+                            temp.copy_within(self.read..self.write, 0);
+                            self.write -= self.read;
+                            self.read = 0;
+                        }
+
+                        let n = reader.read(&mut temp[self.write..]).await?;
+                        self.write += n;
+                    } else {
+                        return Err(StreamError::BufferOverflow);
                     }
-                    let n = reader.read(&mut buffer[*write..]).await?;
-                    *write += n;
-                    total += n;
-                } else {
-                    return Err(StreamError::BufferOverflow);
                 }
-
-                if total >= needed {
-                    break;
-                }
-            }
-        }
-
-        match T::from_bytes(&buffer[*read..*write]) {
-            Ok((tail, message)) => {
-                *read = *write - tail.len();
-                return Ok(message);
-            }
-            Err(Error::Decode(err)) => {
-                return Err(StreamError::Decode(err));
-            }
-            Err(Error::Incomplete(_)) => {
-                unreachable!()
             }
         }
     }
