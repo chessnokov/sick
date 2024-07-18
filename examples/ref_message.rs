@@ -7,7 +7,7 @@ use anyhow::Error as AnyError;
 use sick::{
     decoder::{BufDecoder, Error as DecodeError, FromBytes},
     encoder::{stream::BufEncoder, ToBytes},
-    EndPoint, Handle,
+    make_service, Handle,
 };
 use tokio::{
     net::TcpListener,
@@ -64,10 +64,16 @@ async fn main() -> Result<(), AnyError> {
     let socket = TcpListener::bind("0.0.0.0:8080").await?;
     let (stream, _remote) = socket.accept().await?;
     let (reader, writer) = stream.into_split();
-    let mut endpoint = EndPoint::new(reader, BufDecoder::new(1024), BufEncoder::new(writer));
-    let mut handler = EchoService::default();
+    // let mut endpoint = Terminal::new(reader, BufDecoder::new(1024), BufEncoder::new(writer));
+    let handler = EchoService::default();
 
-    endpoint.handle(&mut handler).await;
+    make_service(
+        handler,
+        BufDecoder::new(1024),
+        BufEncoder::new(writer),
+        reader,
+    )
+    .await;
 
     Ok(())
 }

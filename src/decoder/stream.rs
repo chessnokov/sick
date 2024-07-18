@@ -59,7 +59,7 @@ impl StreamDecoder for BufDecoder {
                 }
                 Err(Error::Decode(err)) => return Err(StreamError::Decode(err)),
                 Err(Error::Incomplete(n)) => {
-                    let needed = n.around().unwrap_or(1);
+                    let needed = n.as_option().unwrap_or(1);
                     let tail = self.buffer.len() - self.write;
                     let free = tail + self.read;
                     if free >= needed {

@@ -43,10 +43,10 @@ pub enum Incomplete {
 }
 
 impl Incomplete {
-    pub fn around(self) -> usize {
+    pub fn as_option(self) -> Option<usize> {
         match self {
-            Incomplete::Unknown => 1,
-            Incomplete::Bytes(n) => n,
+            Incomplete::Unknown => None,
+            Incomplete::Bytes(n) => Some(n),
         }
     }
 }
