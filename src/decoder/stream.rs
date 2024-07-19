@@ -1,7 +1,7 @@
 use core::slice;
 use std::{
     fmt::{self, Display},
-    io::Error as IoError,
+    io::{Error as IoError, ErrorKind as IoErrorKind},
 };
 
 use tokio::io::{AsyncRead, AsyncReadExt};
@@ -82,10 +82,9 @@ impl StreamDecoder for BufDecoder {
                         if n > 0 {
                             self.write += n;
                         } else {
-                            // Fix epoll nature
-                            let byte = reader.read_u8().await?;
-                            unsafe { *temp.get_unchecked_mut(self.write) = byte };
-                            self.write += 1;
+                            return Err(StreamError::Read(IoError::from(
+                                IoErrorKind::UnexpectedEof,
+                            )));
                         }
                     } else {
                         return Err(StreamError::BufferOverflow);
