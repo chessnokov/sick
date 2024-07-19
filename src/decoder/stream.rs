@@ -79,7 +79,14 @@ impl StreamDecoder for BufDecoder {
                         }
 
                         let n = reader.read(&mut temp[self.write..]).await?;
-                        self.write += n;
+                        if n > 0 {
+                            self.write += n;
+                        } else {
+                            // Fix epoll nature
+                            let byte = reader.read_u8().await?;
+                            unsafe { *temp.get_unchecked_mut(self.write) = byte };
+                            self.write += 1;
+                        }
                     } else {
                         return Err(StreamError::BufferOverflow);
                     }

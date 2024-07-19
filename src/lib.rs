@@ -1,5 +1,5 @@
-use std::future::Future;
 pub use std::io::Error;
+use std::{fmt::Display, future::Future};
 
 use decoder::{stream::StreamDecoder, FromBytes};
 use encoder::Encoder;
@@ -24,12 +24,11 @@ pub fn make_service<H, D, E, R>(
     reader: R,
 ) -> impl Future<Output = ()>
 where
-    // T: FromBytes<'a>,
-    // <T as FromBytes<'a>>::Error: Display,
     H: for<'a> Handle<'a>,
     R: AsyncRead + Unpin,
     E: Encoder,
     D: StreamDecoder,
+    for<'a> <<H as Handle<'a>>::Request as FromBytes<'a>>::Error: Display,
 {
     async move {
         let mut reader = reader;
@@ -43,8 +42,8 @@ where
                         Ok(request) => {
                             handler.call(request).await;
                         }
-                        Err(_err) => {
-                            // error!("{err}");
+                        Err(err) => {
+                            error!("{err}");
                             break;
                         },
                     }
