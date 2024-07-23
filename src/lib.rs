@@ -1,9 +1,9 @@
-pub use std::io::Error;
+pub use std::io::Error as IoError;
 use std::{fmt::Display, future::Future};
 
+use anyhow::Error as AnyError;
 use decoder::{stream::StreamDecoder, FromBytes};
 use encoder::Encoder;
-use log::error;
 use tokio::{io::AsyncRead, select};
 
 pub mod decoder;
@@ -14,7 +14,7 @@ pub trait Handle<'request> {
     type Request: FromBytes<'request>;
     async fn call(&mut self, request: Self::Request);
     /// Return only std::io::Error from `Encoder`
-    async fn poll<E: Encoder>(&mut self, encoder: &mut E) -> Result<(), Error>;
+    async fn poll<E: Encoder>(&mut self, encoder: &mut E) -> Result<(), IoError>;
 }
 
 pub fn make_service<H, D, E, R>(
@@ -22,7 +22,7 @@ pub fn make_service<H, D, E, R>(
     decoder: D,
     encoder: E,
     reader: R,
-) -> impl Future<Output = ()>
+) -> impl Future<Output = Result<(), AnyError>>
 where
     H: for<'a> Handle<'a>,
     R: AsyncRead + Unpin,
@@ -43,15 +43,13 @@ where
                             handler.call(request).await;
                         }
                         Err(err) => {
-                            error!("{err}");
-                            break;
+                            return Err(AnyError::msg(format!("{err}")));
                         },
                     }
                 }
                 result = handler.poll(&mut encoder) => {
                     if let Err(err) = result {
-                        error!("{err}");
-                        break;
+                        return Err(AnyError::msg(format!("{err}")));
                     }
                 }
             }

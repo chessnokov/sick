@@ -69,7 +69,6 @@ impl<'request> Handle<'request> for EchoService {
 
 #[tokio::main]
 async fn main() -> Result<(), AnyError> {
-    env_logger::init();
     let socket = TcpListener::bind("0.0.0.0:8080").await?;
     println!("Socket bind");
     let (stream, remote) = socket.accept().await?;
@@ -86,7 +85,7 @@ async fn main() -> Result<(), AnyError> {
         BufEncoder::new(writer),
         reader,
     )
-    .await;
+    .await?;
 
     Ok(())
 }
