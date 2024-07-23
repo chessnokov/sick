@@ -17,6 +17,15 @@ pub trait Handle<'request> {
     async fn poll<E: Encoder>(&mut self, encoder: &mut E) -> Result<(), IoError>;
 }
 
+#[allow(async_fn_in_trait)]
+pub trait Service {
+    type Error;
+    async fn run<D, E>(&mut self, decoder: D, encoder: E) -> Result<(), Self::Error>
+    where
+        D: StreamDecoder,
+        E: Encoder;
+}
+
 pub fn make_service<H, D, E, R>(
     handler: H,
     decoder: D,
