@@ -6,14 +6,14 @@ use std::{
 
 use anyhow::Error as AnyError;
 use sick::{
-    decoder::{BufDecoder, Error as DecodeError, FromBytes, Incomplete},
-    encoder::{stream::BufEncoder, ToBytes},
-    make_service, Handle,
+    decoder::{
+        stream::{BufStreamDecoder, StreamDecoder},
+        Error as DecodeError, FromBytes, Incomplete,
+    },
+    encoder::{stream::BufEncoder, Encoder, ToBytes},
+    Service,
 };
-use tokio::{
-    net::{TcpListener, TcpStream},
-    sync::mpsc::{channel, Receiver, Sender},
-};
+use tokio::net::{TcpListener, TcpStream};
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -39,31 +39,22 @@ impl<'a> ToBytes for Message<'a> {
     }
 }
 
-struct EchoService {
-    tx: Sender<Vec<u8>>,
-    rx: Receiver<Vec<u8>>,
-}
+#[derive(Debug, Copy, Clone, Default)]
+struct EchoService;
+impl Service for EchoService {
+    type Error = AnyError;
 
-impl Default for EchoService {
-    fn default() -> Self {
-        let (tx, rx) = channel(1);
-        Self { tx, rx }
-    }
-}
-
-impl<'request> Handle<'request> for EchoService {
-    type Request = Message<'request>;
-
-    async fn call(&mut self, request: Self::Request) {
-        let bytes = request.0.into_owned();
-        println!("Recieve request: {bytes:?}");
-        self.tx.send(bytes).await.unwrap()
-    }
-
-    async fn poll<E: sick::encoder::Encoder>(&mut self, encoder: &mut E) -> Result<(), Error> {
-        let bytes = self.rx.recv().await.unwrap();
-        println!("Send response: {bytes:?}");
-        encoder.encode(&Message(bytes.into())).await.map(|_| ())
+    async fn run<D, E>(&mut self, decoder: D, encoder: E) -> Result<(), Self::Error>
+    where
+        D: StreamDecoder,
+        E: Encoder,
+    {
+        let mut encoder = encoder;
+        let mut decoder = decoder;
+        loop {
+            let msg = decoder.decode::<Message>().await?;
+            encoder.encode(&msg).await?;
+        }
     }
 }
 
@@ -79,13 +70,9 @@ async fn main() -> Result<(), AnyError> {
     let reader = TcpStream::from_std(read)?;
     let writer = TcpStream::from_std(write)?;
     println!("Socket sucessfuly split");
-    make_service(
-        EchoService::default(),
-        BufDecoder::new(1024),
-        BufEncoder::new(writer),
-        reader,
-    )
-    .await?;
+    EchoService::default()
+        .run(BufStreamDecoder::new(reader, 1024), BufEncoder::new(writer))
+        .await?;
 
     Ok(())
 }

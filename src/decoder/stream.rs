@@ -1,5 +1,6 @@
 use core::slice;
 use std::{
+    error::Error as ErrorExt,
     fmt::{self, Display},
     io::{Error as IoError, ErrorKind as IoErrorKind},
 };
@@ -10,13 +11,23 @@ use super::{BufDecoder, Error, FromBytes};
 
 #[allow(async_fn_in_trait)]
 pub trait StreamDecoder {
-    async fn decode<'a, T, R>(
-        &'a mut self,
-        reader: &mut R,
-    ) -> Result<T, StreamError<<T as FromBytes<'a>>::Error>>
+    async fn decode<'a, T>(&'a mut self) -> Result<T, StreamError<<T as FromBytes<'a>>::Error>>
     where
-        T: FromBytes<'a>,
-        R: AsyncRead + Unpin;
+        T: FromBytes<'a>;
+}
+
+pub struct BufStreamDecoder<R> {
+    inner: BufDecoder,
+    reader: R,
+}
+
+impl<R> BufStreamDecoder<R> {
+    pub fn new(reader: R, size: usize) -> Self {
+        Self {
+            inner: BufDecoder::new(size),
+            reader,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -42,45 +53,46 @@ impl<T> From<IoError> for StreamError<T> {
     }
 }
 
-impl StreamDecoder for BufDecoder {
-    async fn decode<'a, T, R>(
-        &'a mut self,
-        reader: &mut R,
-    ) -> Result<T, StreamError<<T as FromBytes<'a>>::Error>>
+impl<T: fmt::Display + fmt::Debug> ErrorExt for StreamError<T> {}
+
+impl<R> StreamDecoder for BufStreamDecoder<R>
+where
+    R: AsyncRead + Unpin,
+{
+    async fn decode<'a, T>(&'a mut self) -> Result<T, StreamError<<T as FromBytes<'a>>::Error>>
     where
-        R: AsyncRead + Unpin,
         T: FromBytes<'a>,
     {
         loop {
-            match T::from_bytes(&self.buffer[self.read..self.write]) {
+            match T::from_bytes(&self.inner.buffer[self.inner.read..self.inner.write]) {
                 Ok((tail, msg)) => {
-                    self.read = self.write - tail.len();
+                    self.inner.read = self.inner.write - tail.len();
                     return Ok(msg);
                 }
                 Err(Error::Decode(err)) => return Err(StreamError::Decode(err)),
                 Err(Error::Incomplete(n)) => {
                     let needed = n.as_option().unwrap_or(1);
-                    let tail = self.buffer.len() - self.write;
-                    let free = tail + self.read;
+                    let tail = self.inner.buffer.len() - self.inner.write;
+                    let free = tail + self.inner.read;
                     if free >= needed {
                         // Fix borrow checker false error
                         // Safety: because buffer not reallocate or drop
                         let temp = unsafe {
                             slice::from_raw_parts_mut(
-                                self.buffer.as_ptr() as *mut u8,
-                                self.buffer.len(),
+                                self.inner.buffer.as_ptr() as *mut u8,
+                                self.inner.buffer.len(),
                             )
                         };
 
                         if tail < needed {
-                            temp.copy_within(self.read..self.write, 0);
-                            self.write -= self.read;
-                            self.read = 0;
+                            temp.copy_within(self.inner.read..self.inner.write, 0);
+                            self.inner.write -= self.inner.read;
+                            self.inner.read = 0;
                         }
 
-                        let n = reader.read(&mut temp[self.write..]).await?;
+                        let n = self.reader.read(&mut temp[self.inner.write..]).await?;
                         if n > 0 {
-                            self.write += n;
+                            self.inner.write += n;
                         } else {
                             return Err(StreamError::Read(IoError::from(
                                 IoErrorKind::UnexpectedEof,
