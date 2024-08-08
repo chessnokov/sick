@@ -9,6 +9,7 @@ anyhow = "1"
 tokio = { version = "1", features = ["io-util", "macros"] }
 
 [dev-dependencies]
+criterion = "0.5"
 tokio = { version = "1", features = [
     "io-util",
     "macros",
@@ -17,6 +18,10 @@ tokio = { version = "1", features = [
     "rt-multi-thread",
     "net",
 ] }
+
+[[bench]]
+name = "benchmark"
+harness = false
 
 [[example]]
 name = "ref_message"

@@ -5,7 +5,7 @@ pub trait ToBytes {
 }
 
 #[allow(async_fn_in_trait)]
-pub trait Encoder {
+pub trait AsyncEncoder {
     async fn encode<M: ToBytes>(&mut self, message: &M) -> Result<usize, Error>;
 }
 
@@ -14,7 +14,7 @@ pub mod stream {
 
     use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-    use super::{Encoder, Error, ToBytes};
+    use super::{AsyncEncoder, Error, ToBytes};
 
     pub struct BufEncoder<W> {
         buffer: Cursor<Vec<u8>>,
@@ -30,7 +30,7 @@ pub mod stream {
         }
     }
 
-    impl<W: AsyncWrite + Unpin> Encoder for BufEncoder<W> {
+    impl<W: AsyncWrite + Unpin> AsyncEncoder for BufEncoder<W> {
         async fn encode<T: ToBytes>(&mut self, message: &T) -> Result<usize, Error> {
             self.buffer.seek(SeekFrom::Start(0))?;
             message.to_bytes(&mut self.buffer)?;
