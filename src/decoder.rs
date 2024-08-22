@@ -1,23 +1,10 @@
-use std::fmt::{self, Display};
+use std::{error::Error as ErrorExt, fmt};
 
 pub mod stream;
 
 pub trait FromBytes<'bytes>: Sized {
     type Error;
     fn from_bytes(input: &'bytes [u8]) -> Result<(&'bytes [u8], Self), Error<Self::Error>>;
-    /// Implement this only if exist method to fast check input filled,
-    /// for example:
-    /// ```
-    /// if input.len() < REQUIRED {
-    ///   return Some(Incomplete::Bytes(REQUIRED - input.len()))
-    /// }
-    fn check(input: &'bytes [u8]) -> Option<Incomplete> {
-        if let Err(Error::Incomplete(n)) = Self::from_bytes(input) {
-            Some(n)
-        } else {
-            None
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -26,7 +13,7 @@ pub enum Error<T> {
     Decode(T),
 }
 
-impl<T: Display> fmt::Display for Error<T> {
+impl<T: fmt::Display> fmt::Display for Error<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Incomplete(Incomplete::Unknown) => f.write_str("Incomplete data"),
@@ -35,6 +22,8 @@ impl<T: Display> fmt::Display for Error<T> {
         }
     }
 }
+
+impl<T: ErrorExt> ErrorExt for Error<T> {}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Incomplete {
@@ -51,7 +40,7 @@ impl Incomplete {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BufDecoder {
     buffer: Vec<u8>,
     read: usize,

@@ -16,6 +16,7 @@ pub trait AsyncDecoder {
         T: FromBytes<'a>;
 }
 
+#[derive(Debug, Clone)]
 pub struct BufStreamDecoder<R> {
     inner: BufDecoder,
     reader: R,

@@ -1,7 +1,4 @@
-use std::{
-    borrow::Cow,
-    io::{Error, Seek, Write},
-};
+use std::io::{Error, Seek, Write};
 
 use anyhow::Error as AnyError;
 use sick::{
@@ -15,7 +12,7 @@ use sick::{
 use tokio::net::TcpListener;
 
 #[derive(Debug)]
-pub struct Message<'a>(Cow<'a, [u8]>);
+pub struct Message<'a>(&'a [u8]);
 
 impl<'bytes> FromBytes<'bytes> for Message<'bytes> {
     type Error = AnyError;
@@ -25,14 +22,14 @@ impl<'bytes> FromBytes<'bytes> for Message<'bytes> {
         } else {
             println!("Decode bytes: {input:02X?}");
             let (message, tail) = input.split_at(1);
-            Ok((tail, Self(message.into())))
+            Ok((tail, Self(message)))
         }
     }
 }
 
 impl<'a> ToBytes for Message<'a> {
     fn to_bytes<W: Write + Seek>(&self, writer: &mut W) -> Result<usize, Error> {
-        writer.write_all(self.0.as_ref())?;
+        writer.write_all(self.0)?;
         Ok(self.0.len())
     }
 }

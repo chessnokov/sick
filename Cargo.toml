@@ -5,11 +5,11 @@ edition = "2021"
 resolver = "2"
 
 [dependencies]
-anyhow = "1"
 tokio = { version = "1", features = ["io-util", "macros"] }
 
 [dev-dependencies]
-criterion = "0.5"
+anyhow = "1"
+criterion = { version = "0.5", features = ["async_tokio"] }
 tokio = { version = "1", features = [
     "io-util",
     "macros",
