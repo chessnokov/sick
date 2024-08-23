@@ -1,4 +1,4 @@
-use std::{net::ToSocketAddrs, time::Instant};
+use std::{io::Write, net::ToSocketAddrs, time::Instant};
 
 use anyhow::Error as AnyError;
 use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
@@ -10,7 +10,6 @@ use tokio::{
     io::AsyncWriteExt,
     net::{TcpSocket, TcpStream},
     runtime::Runtime,
-    spawn,
 };
 
 #[derive(Debug)]
@@ -27,12 +26,11 @@ impl<'bytes, const N: usize> FromBytes<'bytes> for Message<N> {
     }
 }
 
-fn message_bench<'a, const N: usize>(bencher: &mut Bencher<'a>) {
+fn async_message_bench<'a, const N: usize>(bencher: &mut Bencher<'a>) {
     const BUFFER_MESSAGES: usize = 64;
 
     let runtime = Runtime::new().unwrap();
-    let _guard = runtime.enter();
-    bencher.to_async(&runtime).iter_custom(|iters| async move {
+    bencher.to_async(&runtime).iter_custom(|iters| {
         let socket = TcpSocket::new_v4().unwrap();
         socket
             .bind("127.0.0.1:30000".to_socket_addrs().unwrap().next().unwrap())
@@ -42,29 +40,52 @@ fn message_bench<'a, const N: usize>(bencher: &mut Bencher<'a>) {
         let listener = socket.listen(1024).unwrap();
         let data = vec![0xFF_u8; buffer_size as usize];
 
-        spawn(async move {
+        runtime.spawn(async move {
             let (mut socket, _) = listener.accept().await.unwrap();
             while socket.write_all(data.as_slice()).await.is_ok() {}
         });
 
-        let stream = TcpStream::connect("127.0.0.1:30000").await.unwrap();
-        let mut decoder = BufStreamDecoder::new(stream, N * BUFFER_MESSAGES);
-        let start = Instant::now();
-        for _i in 0..iters {
-            black_box(decoder.decode::<Message<N>>().await).unwrap();
+        async move {
+            let stream = TcpStream::connect("127.0.0.1:30000").await.unwrap();
+            let mut decoder = BufStreamDecoder::new(stream, N * BUFFER_MESSAGES);
+            let start = Instant::now();
+            for _i in 0..iters {
+                black_box(decoder.decode::<Message<N>>().await).unwrap();
+            }
+            start.elapsed()
         }
-        start.elapsed()
+    })
+}
+
+fn semi_async_message_bench<'a, const N: usize>(bencher: &mut Bencher<'a>) {
+    const BUFFER_MESSAGES: usize = 64;
+
+    let runtime = Runtime::new().unwrap();
+    bencher.to_async(&runtime).iter_custom(|iters| {
+        let listener = std::net::TcpListener::bind("127.0.0.1:30000").unwrap();
+        // cat /proc/sys/net/ipv4/tcp_wmem
+        let data = vec![0xFF_u8; 4194304];
+
+        runtime.spawn_blocking(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            while socket.write_all(data.as_slice()).is_ok() {}
+        });
+
+        async move {
+            let stream = TcpStream::connect("127.0.0.1:30000").await.unwrap();
+            let mut decoder = BufStreamDecoder::new(stream, N * BUFFER_MESSAGES);
+            let start = Instant::now();
+            for _i in 0..iters {
+                black_box(decoder.decode::<Message<N>>().await).unwrap();
+            }
+            start.elapsed()
+        }
     })
 }
 
 fn benchmark(c: &mut Criterion) {
-    c.bench_function("decode 1k", message_bench::<1024>);
-    c.bench_function("decode 2k", message_bench::<{ 1024 * 2 }>);
-    c.bench_function("decode 4k", message_bench::<{ 1024 * 4 }>);
-    c.bench_function("decode 8k", message_bench::<{ 1024 * 8 }>);
-    c.bench_function("decode 16k", message_bench::<{ 1024 * 16 }>);
-    c.bench_function("decode 32k", message_bench::<{ 1024 * 32 }>);
-    c.bench_function("decode 64k", message_bench::<{ 1024 * 64 }>);
+    c.bench_function("async decode 1k", async_message_bench::<1024>);
+    c.bench_function("semi async decode 1k", semi_async_message_bench::<1024>);
 }
 
 criterion_group!(benches, benchmark);
