@@ -99,7 +99,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use tokio::io::repeat;
+    use tokio::{
+        io::{simplex, AsyncWriteExt},
+        select,
+    };
 
     use crate::decoder::Incomplete;
 
@@ -107,28 +110,35 @@ mod tests {
 
     #[tokio::test]
     async fn stream_decoder() {
-        const MESSAGE_SIZE: usize = 283;
+        const PATTERN: [u8; 11] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xA];
 
-        struct Message<'a>(&'a [u8]);
-        impl<'a> FromBytes<'a> for Message<'a> {
+        impl<'a> FromBytes<'a> for &'a [u8] {
             type Error = ();
 
             fn from_bytes(input: &'a [u8]) -> Result<(&'a [u8], Self), Error<Self::Error>> {
-                if let Some((data, tail)) = input.split_at_checked(MESSAGE_SIZE) {
-                    Ok((tail, Message(data)))
+                if let Some((data, tail)) = input.split_at_checked(PATTERN.len()) {
+                    Ok((tail, data))
                 } else {
                     Err(Error::Incomplete(Incomplete::Bytes(
-                        MESSAGE_SIZE - input.len(),
+                        PATTERN.len() - input.len(),
                     )))
                 }
             }
         }
 
-        let mut decoder = BufStreamDecoder::new(repeat(0xAA), 337);
+        let (receiver, mut sender) = simplex(197);
+
+        let mut decoder = BufStreamDecoder::new(receiver, 337);
 
         for _ in 0..1024 * 2 {
-            let msg = decoder.decode::<Message>().await.unwrap();
-            assert_eq!(msg.0, vec![0xAA; MESSAGE_SIZE]);
+            select! {
+                maybe = decoder.decode::<&[u8]>() => {
+                    assert_eq!(maybe.unwrap(), &PATTERN[..]);
+                }
+                result = sender.write_all(&PATTERN[..]) => {
+                    result.unwrap()
+                }
+            }
         }
     }
 }
