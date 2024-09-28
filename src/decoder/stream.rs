@@ -1,5 +1,5 @@
-use core::slice;
 use std::{
+    cell::UnsafeCell,
     error::Error as ErrorExt,
     fmt::{self, Display},
     io::{Error as IoError, ErrorKind as IoErrorKind},
@@ -16,16 +16,16 @@ pub trait AsyncDecoder {
         T: FromBytes<'a>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct BufStreamDecoder<R> {
-    inner: BufDecoder,
+    inner: UnsafeCell<BufDecoder>,
     reader: R,
 }
 
 impl<R> BufStreamDecoder<R> {
     pub fn new(reader: R, size: usize) -> Self {
         Self {
-            inner: BufDecoder::new(size),
+            inner: UnsafeCell::new(BufDecoder::new(size)),
             reader,
         }
     }
@@ -35,7 +35,7 @@ impl<R> BufStreamDecoder<R> {
 pub enum StreamError<T> {
     Read(IoError),
     Decode(T),
-    BufferOverflow,
+    OutOfMemory,
 }
 
 impl<T: Display> fmt::Display for StreamError<T> {
@@ -43,7 +43,7 @@ impl<T: Display> fmt::Display for StreamError<T> {
         match self {
             StreamError::Read(err) => write!(f, "{err}"),
             StreamError::Decode(err) => write!(f, "{err}"),
-            StreamError::BufferOverflow => f.write_str("Not enough memory"),
+            StreamError::OutOfMemory => f.write_str("Not enough memory"),
         }
     }
 }
@@ -65,45 +65,70 @@ where
         T: FromBytes<'a>,
     {
         loop {
-            match T::from_bytes(&self.inner.buffer[self.inner.read..self.inner.write]) {
-                Ok((tail, msg)) => {
-                    self.inner.read = self.inner.write - tail.len();
+            // SAFETY: end of borrow when return
+            match unsafe { (&mut *self.inner.get()).decode() } {
+                Ok(msg) => {
                     return Ok(msg);
                 }
                 Err(Error::Decode(err)) => return Err(StreamError::Decode(err)),
                 Err(Error::Incomplete(n)) => {
                     let needed = n.as_option().unwrap_or(1);
-                    let tail = self.inner.buffer.len() - self.inner.write;
-                    let free = tail + self.inner.read;
+                    let decoder = self.inner.get_mut();
+                    let tail = decoder.tail();
+                    let free = decoder.free();
                     if free >= needed {
-                        // Fix borrow checker false error
-                        // Safety: because buffer not reallocate or drop
-                        let temp = unsafe {
-                            slice::from_raw_parts_mut(
-                                self.inner.buffer.as_ptr() as *mut u8,
-                                self.inner.buffer.len(),
-                            )
-                        };
-
                         if tail < needed {
-                            temp.copy_within(self.inner.read..self.inner.write, 0);
-                            self.inner.write -= self.inner.read;
-                            self.inner.read = 0;
+                            decoder.shift();
                         }
-
-                        let n = self.reader.read(&mut temp[self.inner.write..]).await?;
+                        let n = self.reader.read(decoder.to_write()).await?;
                         if n > 0 {
-                            self.inner.write += n;
+                            decoder.write += n;
                         } else {
                             return Err(StreamError::Read(IoError::from(
                                 IoErrorKind::UnexpectedEof,
                             )));
                         }
                     } else {
-                        return Err(StreamError::BufferOverflow);
+                        return Err(StreamError::OutOfMemory);
                     }
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::io::repeat;
+
+    use crate::decoder::Incomplete;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn stream_decoder() {
+        const MESSAGE_SIZE: usize = 283;
+
+        struct Message<'a>(&'a [u8]);
+        impl<'a> FromBytes<'a> for Message<'a> {
+            type Error = ();
+
+            fn from_bytes(input: &'a [u8]) -> Result<(&'a [u8], Self), Error<Self::Error>> {
+                if let Some((data, tail)) = input.split_at_checked(MESSAGE_SIZE) {
+                    Ok((tail, Message(data)))
+                } else {
+                    Err(Error::Incomplete(Incomplete::Bytes(
+                        MESSAGE_SIZE - input.len(),
+                    )))
+                }
+            }
+        }
+
+        let mut decoder = BufStreamDecoder::new(repeat(0xAA), 337);
+
+        for _ in 0..1024 * 2 {
+            let msg = decoder.decode::<Message>().await.unwrap();
+            assert_eq!(msg.0, vec![0xAA; MESSAGE_SIZE]);
         }
     }
 }

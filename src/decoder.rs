@@ -55,4 +55,49 @@ impl BufDecoder {
             write: 0,
         }
     }
+
+    pub fn decode<'a, T>(&'a mut self) -> Result<T, Error<T::Error>>
+    where
+        T: FromBytes<'a>,
+    {
+        let (tail, value) = T::from_bytes(&self.buffer[self.read..self.write])?;
+        self.read = self.write - tail.len();
+        Ok(value)
+    }
+
+    pub fn tail(&self) -> usize {
+        self.buffer.len() - self.write
+    }
+
+    pub fn free(&self) -> usize {
+        self.read + self.tail()
+    }
+
+    pub fn shift(&mut self) {
+        if self.read > 0 {
+            self.buffer.copy_within(self.read..self.write, 0);
+            self.write -= self.read;
+            self.read = 0;
+        }
+    }
+
+    pub fn extend(&mut self, n: usize) {
+        self.buffer.resize(self.buffer.len() + n, 0);
+    }
+
+    pub fn truncate(&mut self) {
+        self.buffer.resize(self.write, 0);
+    }
+
+    pub fn len(&self) -> usize {
+        self.buffer.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.buffer.len() == 0
+    }
+
+    pub fn to_write(&mut self) -> &mut [u8] {
+        &mut self.buffer[self.write..]
+    }
 }
