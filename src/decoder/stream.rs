@@ -99,10 +99,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use tokio::{
-        io::{simplex, AsyncWriteExt},
-        select,
-    };
+    use tokio::io::{simplex, AsyncWriteExt};
 
     use crate::decoder::Incomplete;
 
@@ -110,7 +107,8 @@ mod tests {
 
     #[tokio::test]
     async fn stream_decoder() {
-        const PATTERN: [u8; 11] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xA];
+        const PATTERN: &[u8] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xA];
+        const ITERATIONS: usize = 1024 * 2;
 
         impl<'a> FromBytes<'a> for &'a [u8] {
             type Error = ();
@@ -127,18 +125,17 @@ mod tests {
         }
 
         let (receiver, mut sender) = simplex(197);
-
         let mut decoder = BufStreamDecoder::new(receiver, 337);
 
-        for _ in 0..1024 * 2 {
-            select! {
-                maybe = decoder.decode::<&[u8]>() => {
-                    assert_eq!(maybe.unwrap(), &PATTERN[..]);
-                }
-                result = sender.write_all(&PATTERN[..]) => {
-                    result.unwrap()
-                }
+        tokio::spawn(async move {
+            for _ in 0..ITERATIONS {
+                sender.write_all(PATTERN).await.unwrap();
             }
+        });
+
+        for _ in 0..ITERATIONS {
+            let msg = decoder.decode::<&[u8]>().await.unwrap();
+            assert_eq!(msg, PATTERN);
         }
     }
 }
