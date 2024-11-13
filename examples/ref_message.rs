@@ -60,7 +60,7 @@ async fn main() -> Result<(), AnyError> {
     let (mut stream, remote) = socket.accept().await?;
     println!("Connection accept from {remote}");
     let (read, write) = stream.split();
-    EchoService::default()
+    EchoService
         .run(BufStreamDecoder::new(read, 1024), BufEncoder::new(write))
         .await?;
 
