@@ -66,7 +66,7 @@ where
     {
         loop {
             // SAFETY: end of borrow when return
-            match unsafe { (&mut *self.inner.get()).decode() } {
+            match unsafe { (*self.inner.get()).decode() } {
                 Ok(msg) => {
                     return Ok(msg);
                 }
