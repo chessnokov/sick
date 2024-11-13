@@ -13,10 +13,10 @@ criterion = { version = "0.5", features = ["async_tokio"] }
 tokio = { version = "1", features = [
     "io-util",
     "macros",
-    "sync",
+    "net",
     "rt",
     "rt-multi-thread",
-    "net",
+    "sync"
 ] }
 
 [[bench]]
