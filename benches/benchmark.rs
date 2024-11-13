@@ -12,6 +12,8 @@ use tokio::{
     runtime::Runtime,
 };
 
+const BUFFER_MESSAGES: usize = 64;
+
 #[derive(Debug)]
 pub struct Message<const N: usize>;
 
@@ -26,9 +28,7 @@ impl<'bytes, const N: usize> FromBytes<'bytes> for Message<N> {
     }
 }
 
-fn async_message_bench<'a, const N: usize>(bencher: &mut Bencher<'a>) {
-    const BUFFER_MESSAGES: usize = 64;
-
+fn async_message_bench<const N: usize>(bencher: &mut Bencher<'_>) {
     let runtime = Runtime::new().unwrap();
     bencher.to_async(&runtime).iter_custom(|iters| {
         let socket = TcpSocket::new_v4().unwrap();
@@ -57,9 +57,7 @@ fn async_message_bench<'a, const N: usize>(bencher: &mut Bencher<'a>) {
     })
 }
 
-fn semi_async_message_bench<'a, const N: usize>(bencher: &mut Bencher<'a>) {
-    const BUFFER_MESSAGES: usize = 64;
-
+fn sync_write_async_decode<const N: usize>(bencher: &mut Bencher<'_>) {
     let runtime = Runtime::new().unwrap();
     bencher.to_async(&runtime).iter_custom(|iters| {
         let listener = std::net::TcpListener::bind("127.0.0.1:30000").unwrap();
@@ -84,8 +82,11 @@ fn semi_async_message_bench<'a, const N: usize>(bencher: &mut Bencher<'a>) {
 }
 
 fn benchmark(c: &mut Criterion) {
-    c.bench_function("async decode 1k", async_message_bench::<1024>);
-    c.bench_function("semi async decode 1k", semi_async_message_bench::<1024>);
+    c.bench_function("async write async decode 1k", async_message_bench::<1024>);
+    c.bench_function(
+        "sync write async decode 1k",
+        sync_write_async_decode::<1024>,
+    );
 }
 
 criterion_group!(benches, benchmark);
