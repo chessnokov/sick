@@ -5,8 +5,8 @@ pub trait ToBytes {
 }
 
 #[allow(async_fn_in_trait)]
-pub trait AsyncEncoder {
-    async fn encode<M: ToBytes>(&mut self, message: &M) -> Result<usize, Error>;
+pub trait AsyncEncoder: Send {
+    async fn encode<M: ToBytes>(&mut self, message: M) -> Result<usize, Error>;
 }
 
 pub mod stream {
@@ -30,8 +30,8 @@ pub mod stream {
         }
     }
 
-    impl<W: AsyncWrite + Unpin> AsyncEncoder for BufEncoder<W> {
-        async fn encode<T: ToBytes>(&mut self, message: &T) -> Result<usize, Error> {
+    impl<W: AsyncWrite + Send + Unpin> AsyncEncoder for BufEncoder<W> {
+        async fn encode<T: ToBytes>(&mut self, message: T) -> Result<usize, Error> {
             self.buffer.seek(SeekFrom::Start(0))?;
             message.to_bytes(&mut self.buffer)?;
             let pos = self.buffer.position() as usize;

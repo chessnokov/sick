@@ -8,8 +8,8 @@ pub mod encoder;
 
 /// Abstract Stateful service,
 #[allow(async_fn_in_trait)]
-pub trait AsyncService {
-    type Error;
+pub trait AsyncService: Send {
+    type Error: Send;
     async fn run<D, E>(&mut self, decoder: D, encoder: E) -> Result<(), Self::Error>
     where
         D: AsyncDecoder,

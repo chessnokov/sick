@@ -10,7 +10,7 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 use super::{BufDecoder, Error, FromBytes};
 
 #[allow(async_fn_in_trait)]
-pub trait AsyncDecoder {
+pub trait AsyncDecoder: Send {
     async fn decode<'a, T>(&'a mut self) -> Result<T, StreamError<<T as FromBytes<'a>>::Error>>
     where
         T: FromBytes<'a>;
@@ -58,7 +58,7 @@ impl<T: fmt::Display + fmt::Debug> ErrorExt for StreamError<T> {}
 
 impl<R> AsyncDecoder for BufStreamDecoder<R>
 where
-    R: AsyncRead + Unpin,
+    R: AsyncRead + Send + Unpin,
 {
     async fn decode<'a, T>(&'a mut self) -> Result<T, StreamError<<T as FromBytes<'a>>::Error>>
     where

@@ -5,6 +5,7 @@ edition = "2021"
 resolver = "2"
 
 [dependencies]
+async-trait = "0.1"
 tokio = { version = "1", features = ["io-util", "macros"] }
 
 [dev-dependencies]
@@ -16,7 +17,7 @@ tokio = { version = "1", features = [
     "net",
     "rt",
     "rt-multi-thread",
-    "sync"
+    "sync",
 ] }
 
 [[bench]]
@@ -25,3 +26,9 @@ harness = false
 
 [[example]]
 name = "ref_message"
+
+[[example]]
+name = "own_message"
+
+[[example]]
+name = "spawn_service"

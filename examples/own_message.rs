@@ -12,9 +12,9 @@ use sick::{
 use tokio::net::TcpListener;
 
 #[derive(Debug)]
-pub struct Message<'a>(&'a [u8]);
+pub struct Message(Vec<u8>);
 
-impl<'bytes> FromBytes<'bytes> for Message<'bytes> {
+impl<'bytes> FromBytes<'bytes> for Message {
     type Error = AnyError;
     fn from_bytes(input: &'bytes [u8]) -> Result<(&'bytes [u8], Self), DecodeError<Self::Error>> {
         if input.is_empty() {
@@ -22,20 +22,21 @@ impl<'bytes> FromBytes<'bytes> for Message<'bytes> {
         } else {
             println!("Decode bytes: {input:02X?}");
             let (message, tail) = input.split_at(1);
-            Ok((tail, Self(message)))
+            Ok((tail, Self(message.into())))
         }
     }
 }
 
-impl<'a> ToBytes for Message<'a> {
+impl ToBytes for Message {
     fn to_bytes<W: Write + Seek>(&self, writer: &mut W) -> Result<usize, Error> {
-        writer.write_all(self.0)?;
+        writer.write_all(self.0.as_slice())?;
         Ok(self.0.len())
     }
 }
 
 #[derive(Debug, Copy, Clone, Default)]
 struct EchoService;
+
 impl AsyncService for EchoService {
     type Error = AnyError;
 
@@ -47,8 +48,14 @@ impl AsyncService for EchoService {
         let mut encoder = encoder;
         let mut decoder = decoder;
         loop {
-            let msg = decoder.decode::<Message>().await?;
-            encoder.encode(msg).await?;
+            let msg = decoder
+                .decode::<Message>()
+                .await
+                .map_err(|err| AnyError::msg(format!("{err}")))?;
+            encoder
+                .encode(msg)
+                .await
+                .map_err(|err| AnyError::msg(format!("{err}")))?;
         }
     }
 }
